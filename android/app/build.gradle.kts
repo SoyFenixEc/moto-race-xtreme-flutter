@@ -22,6 +22,7 @@ android {
 
     namespace = "app.motoracextreme.app"
     compileSdk = 36
+    ndkVersion = "28.2.13676358"
     compileOptions {
         isCoreLibraryDesugaringEnabled = true
         sourceCompatibility = JavaVersion.VERSION_17
@@ -48,6 +49,9 @@ android {
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt")
             )
+            ndk {
+                debugSymbolLevel = "FULL"
+            }
         }
     }
 }
