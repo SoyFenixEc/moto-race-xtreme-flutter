@@ -692,6 +692,20 @@ const VC=['#FF5252','#448AFF','#69F0AE','#FF4081','#FFC107','#9C27B0'];
 const VT=['car','truck','van','bus','person','animal','bicycle','triangle','square','circle'];
 function D(id){return document.getElementById(id)}
 
+// 🎵 SONIDOS (seguros - no bloquean si AudioContext falla)
+let actx=null;
+function safeRun(fn){try{fn()}catch(e){}}
+function initAudio(){try{if(!actx)actx=new(window.AudioContext||window.webkitAudioContext)();if(actx&&actx.state==='suspended')actx.resume()}catch(e){}}
+function beep(f,d,v){try{if(!actx)return;const o=actx.createOscillator(),g=actx.createGain();o.type='square';o.frequency.value=f;g.gain.setValueAtTime(v,actx.currentTime);g.gain.exponentialRampToValueAtTime(.001,actx.currentTime+d);o.connect(g);g.connect(actx.destination);o.start();o.stop(actx.currentTime+d)}catch(e){}}
+function playClick(){if(!sound)return;safeRun(()=>{initAudio();if(actx)safeRun(()=>beep(880,.07,.15))})}
+function playScore(){if(!sound)return;safeRun(()=>{initAudio();if(actx){safeRun(()=>beep(880,.1,.25));setTimeout(()=>safeRun(()=>beep(1100,.1,.15)),70)}})}
+function playLevelup(){if(!sound)return;safeRun(()=>{initAudio();if(actx){safeRun(()=>beep(523,.1,.15));setTimeout(()=>safeRun(()=>beep(659,.1,.15)),120);setTimeout(()=>safeRun(()=>beep(784,.1,.15)),240);setTimeout(()=>safeRun(()=>beep(1047,.25,.2)),360)}})}
+function playEngine(){if(!sound)return;safeRun(()=>{initAudio();if(actx){const o=actx.createOscillator(),g=actx.createGain();o.type='triangle';o.frequency.setValueAtTime(200,actx.currentTime);o.frequency.exponentialRampToValueAtTime(80,actx.currentTime+.6);g.gain.setValueAtTime(.3,actx.currentTime);g.gain.exponentialRampToValueAtTime(.001,actx.currentTime+.8);o.connect(g);g.connect(actx.destination);o.start();o.stop(actx.currentTime+.8)}})}
+function playGameOver(){if(!sound)return;safeRun(()=>{initAudio();if(actx){safeRun(()=>beep(440,.15,.25));setTimeout(()=>safeRun(()=>beep(370,.15,.2)),150);setTimeout(()=>safeRun(()=>beep(311,.15,.18)),300);setTimeout(()=>safeRun(()=>beep(262,.3,.2)),450)}})}
+function playHit(){if(!sound)return;safeRun(()=>{initAudio();if(actx){safeRun(()=>beep(200,.08,.25));setTimeout(()=>safeRun(()=>beep(160,.12,.15)),80)}})}
+function playHeart(){if(!sound)return;safeRun(()=>{initAudio();if(actx){safeRun(()=>beep(660,.06,.15));setTimeout(()=>safeRun(()=>beep(880,.08,.18)),80);setTimeout(()=>safeRun(()=>beep(1100,.1,.12)),160)}})}
+function playStar(){if(!sound)return;safeRun(()=>{initAudio();if(actx){safeRun(()=>beep(880,.1,.2));setTimeout(()=>safeRun(()=>beep(1100,.1,.2)),100);setTimeout(()=>safeRun(()=>beep(1320,.12,.25)),200);setTimeout(()=>safeRun(()=>beep(1760,.2,.3)),320)}})}
+
 function init(){
  cv=D('game-canvas');ctx=cv.getContext('2d');sz();
  player={x:cv.width/2,y:cv.height-100,w:26,h:44};
