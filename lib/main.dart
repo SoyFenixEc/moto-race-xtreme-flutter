@@ -103,7 +103,7 @@ Future<void> _showLocalNotification(
     enableVibration: true,
     showWhen: true,
     icon: 'ic_notification',
-    color: 0xFFFFDD00,
+    color: Color(0xFFFFDD00),
   );
   const details = NotificationDetails(android: androidDetails);
 
