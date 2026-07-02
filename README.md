@@ -2,7 +2,7 @@
 
 ![Logo](assets/icon/logo.png)
 
-Juego de carreras estilo arcade (endless runner) en **HTML5 Canvas**, ejecutado dentro de una **app Flutter** con **WebView**. Corre localmente sin conexión a internet (excepto para scores online y anuncios).
+Juego de carreras estilo arcade (endless runner) en **HTML5 Canvas**, ejecutado dentro de una **app Flutter** con **WebView**. Corre localmente sin conexión a internet (excepto para scores online, anuncios y notificaciones).
 
 ---
 
@@ -14,7 +14,10 @@ Juego de carreras estilo arcade (endless runner) en **HTML5 Canvas**, ejecutado 
 - [Build & Deploy](#-build--deploy)
 - [Play Console](#-play-console)
 - [API Backend](#-api-backend)
+- [Notificaciones Push (FCM)](#-notificaciones-push-fcm)
 - [Configuración](#-configuración)
+- [Dispositivos de Prueba](#-dispositivos-de-prueba)
+- [Arquitectura Técnica](#-arquitectura-técnica)
 - [Créditos](#-créditos)
 
 ---
@@ -35,9 +38,11 @@ Juego de carreras estilo arcade (endless runner) en **HTML5 Canvas**, ejecutado 
 ### 📱 App
 - **Flutter** + **flutter_inappwebview** (WebView para el juego)
 - **AdMob** (banner abajo + interstitial en botones clave y cada 5 niveles)
-- **Firebase Cloud Messaging** (notificaciones push)
+- **Firebase Cloud Messaging** (notificaciones push automáticas)
 - **Scores online** vía API PHP + MySQL
 - **Zoom reducido al 80%** para mejor visualización
+- **Canal de notificaciones Android** con flutter_local_notifications
+- **FCM token inyectado automáticamente** en cada login (sin cambios en JS)
 - **Logo original** del juego en ícono launcher
 
 ### 📢 Interstitial Ads
@@ -57,7 +62,7 @@ Juego de carreras estilo arcade (endless runner) en **HTML5 Canvas**, ejecutado 
 moto-race-xtreme-flutter/
 ├── pubspec.yaml                    # Dependencias Flutter
 ├── lib/
-│   └── main.dart                   # App completa (800+ líneas)
+│   └── main.dart                   # App completa (incluye FCM, Ads, API bridge)
 ├── android/
 │   ├── app/
 │   │   ├── build.gradle.kts        # Build config (SDK 36, target 35)
@@ -67,6 +72,7 @@ moto-race-xtreme-flutter/
 │   │       ├── AndroidManifest.xml
 │   │       └── res/
 │   │           ├── mipmap-*/        # Iconos launcher
+│   │           ├── drawable/        # Icono notificación (ic_notification.xml)
 │   │           ├── drawable-*/      # Iconos adaptativos
 │   │           └── xml/
 │   │               └── network_security_config.xml
@@ -141,8 +147,10 @@ Ejecutar `build_moto.bat` en Windows.
 
 ### Firebase
 - **Project ID:** `moto-race-xtreme`
+- **Project Number:** `253177799857`
 - **Storage bucket:** `moto-race-xtreme.firebasestorage.app`
-- **Google Services JSON:** `android/app/google-services.json`
+- **Service Account:** `firebase-adminsdk-fbsvc@moto-race-xtreme.iam.gserviceaccount.com`
+- **Key file:** `moto-race-xtreme-service-account.json` (en el servidor)
 
 ### Subida Automática
 ```bash
@@ -186,24 +194,109 @@ http://161.97.74.198/moto_racer_extreme/api.php
 
 | Acción | Método | Descripción |
 |--------|--------|-------------|
-| `login` | POST | Login automático, devuelve `player_id` |
+| `login` | POST | Login automático + guarda FCM token |
 | `save_score` | POST | Guarda puntuación |
 | `leaderboard` | GET | Top jugadores |
+| `update_fcm_token` | POST | Actualiza FCM token de un player |
 
 ### Archivos del backend
 ```
 /var/www/html/moto_racer_extreme/
-├── index.html        # Juego original (para web)
-├── api.php           # API REST
-├── config.php        # Conexión MySQL
-├── moto_racer.sql    # Schema de BD
-└── logo.png          # Logo del juego (corrupto)
+├── api.php                                # API REST principal
+├── config.php                             # Conexión MySQL
+├── fcm_config.php                         # Config FCM (proyecto + service account)
+├── send_notifications.php                 # Envío de notificaciones push (FCM v1)
+├── moto-race-xtreme-service-account.json  # Service Account Firebase (¡no compartir!)
+└── moto_racer.sql                         # Schema de BD
 ```
 
 ### Base de Datos MySQL
 - **DB:** `moto_racer`
-- **Tablas:** `players`, `scores`
+- **Tablas:** `players`, `scores`, `device_tokens`, `notificaciones_fcm`
+- **Charset:** utf8mb4 (soporta emojis)
 - **Usuario:** root / pass: `123qweQWE`
+
+#### Tabla `players`
+| Campo | Tipo | Descripción |
+|-------|------|-------------|
+| id | INT AUTO_INCREMENT | PK |
+| nickname | VARCHAR(50) | Nickname único |
+| ip | VARCHAR(45) | IP del dispositivo |
+| location | VARCHAR(100) | Ubicación (opcional) |
+| lat, lng | DECIMAL | Coordenadas |
+| device | VARCHAR(20) | Mobile / PC |
+| user_agent | TEXT | User-Agent del WebView |
+| created_at | TIMESTAMP | Alta |
+
+#### Tabla `scores`
+| Campo | Tipo | Descripción |
+|-------|------|-------------|
+| id | INT AUTO_INCREMENT | PK |
+| player_id | INT | FK → players |
+| score | INT | Puntuación |
+| level | INT | Nivel alcanzado |
+| vehicles_passed | INT | Vehículos esquivados |
+| played_at | TIMESTAMP | Fecha de partida |
+
+#### Tabla `device_tokens`
+| Campo | Tipo | Descripción |
+|-------|------|-------------|
+| id | INT AUTO_INCREMENT | PK |
+| player_id | INT | FK → players |
+| fcm_token | VARCHAR(255) | Token FCM del dispositivo |
+| platform | VARCHAR(20) | android / ios |
+| app_version | VARCHAR(20) | Versión de la app |
+| is_active | TINYINT(1) | 1=activo, 0=desactivado |
+| created_at, updated_at | TIMESTAMP | Control de tiempo |
+- **UNIQUE KEY:** `(player_id, fcm_token)`
+
+---
+
+## 📲 Notificaciones Push (FCM)
+
+### Cómo funciona
+1. **FCM Token:** Se captura automáticamente al abrir la app via `FirebaseMessaging.instance.getToken()`
+2. **Inyección en Login:** Flutter inyecta `fcm_token`, `platform` y `app_version` en cada login
+3. **Almacenamiento:** El PHP lo guarda en `device_tokens` (ON DUPLICATE KEY UPDATE, sin duplicados)
+4. **Renovación:** Si Firebase renueva el token, Flutter lo captura con `onTokenRefresh` y se actualiza en el próximo login
+
+### Cómo enviar una notificación
+```sql
+INSERT INTO notificaciones_fcm (titulo, mensaje) 
+VALUES ('🏍️ Moto Race Xtreme', 'Feliz inicio de semana 🎉 sorteo especial! 🏆');
+```
+
+El CRON cada minuto ejecuta `send_notifications.php`, que:
+1. Obtiene el access token OAuth2 (Service Account)
+2. Envía push FCM v1 a todos los tokens activos
+3. Desactiva tokens inválidos (NotRegistered, Requested entity not found)
+4. Marca la notificación como enviada
+
+### CRON
+```bash
+* * * * * php /var/www/html/moto_racer_extreme/send_notifications.php >> /var/log/moto_fcm.log 2>&1
+```
+
+### Tabla `notificaciones_fcm`
+| Campo | Tipo | Descripción |
+|-------|------|-------------|
+| id | INT AUTO_INCREMENT | PK |
+| titulo | VARCHAR(100) | Título de la notificación |
+| mensaje | TEXT | Cuerpo del mensaje |
+| data_json | TEXT | JSON con datos extra (opcional) |
+| enviado | TINYINT(1) | 0=pendiente, 1=enviado |
+| enviado_at | TIMESTAMP | Fecha de envío |
+| created_at | TIMESTAMP | Fecha de creación |
+
+### Archivos relacionados
+- `fcm_config.php` — Configuración del proyecto Firebase y URL de la API
+- `send_notifications.php` — Script de envío (OAuth2 + FCM v1)
+- `moto-race-xtreme-service-account.json` — Service Account de Firebase
+
+### Flujo de Notificación en la App (Flutter)
+1. **`main()`:** Firebase.initializeApp() → crea canal de notificación Android
+2. **Foreground:** `FirebaseMessaging.onMessage` → muestra notificación local via `flutter_local_notifications`
+3. **Background/Terminada:** `onBackgroundMessage` handler registrado
 
 ---
 
@@ -221,6 +314,7 @@ dependencies:
   package_info_plus: ^8.1.0
   url_launcher: ^6.3.1
   flutter_launcher_icons: ^0.14.3
+  flutter_local_notifications: ^18.0.1
 ```
 
 ### Android Config
@@ -240,7 +334,6 @@ dependencies:
 | Moto G15 | `ZY32L5J24D` | Android 15 (API 35) |
 
 ### ADB over Tailscale
-Requerido: conectar Moto G15 a Tailscale + habilitar ADB TCP:
 ```bash
 adb tcpip 5555                    # (una vez por USB)
 adb connect <tailscale-ip-moto>   # ADB over Tailscale
@@ -251,17 +344,29 @@ adb connect <tailscale-ip-moto>   # ADB over Tailscale
 ## 🧠 Arquitectura Técnica
 
 ### Flujo de la App
-1. **Inicio:** Firebase initialize + AdMob initialize + FCM token
+1. **Inicio:** Firebase initialize (await) + AdMob initialize + FCM token + canal notificación
 2. **WebView:** Carga el juego HTML5 desde `about:blank` con el contenido embebido en Dart
 3. **API Bridge:** JavaScript llama handlers de Flutter para login/leaderboard/save_score
-4. **Dart HttpClient:** Flutter hace las peticiones HTTP (evita bloqueo cleartext del WebView)
-5. **Anuncios:** Banner abajo + interstitial (controlados desde JS via Flutter)
-6. **Notificaciones:** FCM para push notifications
+4. **FCM auto-inyectado:** Flutter agrega `fcm_token + platform + app_version` al login sin tocar JS
+5. **Dart HttpClient:** Flutter hace las peticiones HTTP (evita bloqueo cleartext del WebView)
+6. **Anuncios:** Banner abajo + interstitial (controlados desde JS via Flutter)
+7. **Notificaciones:** FCM v1 con OAuth2 (Service Account) + cron cada minuto
+8. **Foreground notifications:** flutter_local_notifications para mostrar notis con app abierta
+
+### FCM Token Flow
+```
+JS autoLogin() → flutterApi('login', {nickname, device, user_agent})
+         ↓
+Flutter handler: espera _fcmToken (hasta 5s), lo inyecta + platform + app_version
+         ↓
+PHP api.php: guarda en device_tokens con ON DUPLICATE KEY UPDATE
+```
 
 ### Seguridad
 - HTTP permitido solo para la API del servidor (configurado en network_security_config.xml)
 - Keystore exclusivo para este proyecto (no compartir con AGAL)
-- Service account de Google con acceso solo a Play Console
+- Service account de Firebase con acceso al proyecto `moto-race-xtreme`
+- Tokens FCM inválidos se desactivan automáticamente
 
 ---
 
