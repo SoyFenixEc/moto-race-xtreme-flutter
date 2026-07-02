@@ -558,15 +558,15 @@ body{font-family:'Rajdhani',sans-serif;background:#0a0a1a;min-height:100vh;displ
 .top3-title{font-size:.75rem;color:rgba(255,255,255,.25);text-transform:uppercase;letter-spacing:3px;margin-bottom:6px;text-align:center}
 #top-bar{position:absolute;top:0;left:0;width:100%;display:flex;justify-content:space-between;align-items:center;padding:12px 16px;z-index:10;background:linear-gradient(180deg,rgba(0,0,0,.7) 0%,transparent 100%)}
 #top-center{display:flex;gap:10px;align-items:center}
-#pause-btn,#home-btn-top{background:rgba(0,0,0,.5);border:none;width:58px;height:58px;border-radius:50%;color:#fff;font-size:1.5rem;cursor:pointer}
+#pause-btn,#home-btn-top{background:rgba(0,0,0,.5);border:none;width:40px;height:40px;border-radius:50%;color:#fff;font-size:1rem;cursor:pointer}
 #pause-btn{color:var(--ny)}
 #home-btn-top{color:#ff6666}
 #score-label{font-size:1.2rem;color:rgba(255,255,255,.5);text-transform:uppercase;letter-spacing:2px}
-#score-value{font-family:'Orbitron',sans-serif;font-size:3.2rem;font-weight:700;color:var(--ny);text-shadow:0 0 10px rgba(255,221,0,.3);line-height:1}
+#score-value{font-family:'Orbitron',sans-serif;font-size:2rem;font-weight:700;color:var(--ny);text-shadow:0 0 10px rgba(255,221,0,.3);line-height:1}
 #level-badge{background:rgba(255,255,255,.1);border:1px solid rgba(0,212,255,.3);padding:8px 18px;border-radius:20px;font-size:1.3rem;color:var(--nb);margin-top:4px;display:inline-block}
 #top-right{display:flex;gap:12px;align-items:center}
 #hearts-display{display:flex;gap:8px;align-items:center;margin-right:8px}
-#hearts-display .heart{font-size:3.2rem;color:#ff4444;text-shadow:0 0 6px rgba(255,0,0,.4);transition:all .3s}
+#hearts-display .heart{font-size:2rem;color:#ff4444;text-shadow:0 0 6px rgba(255,0,0,.4);transition:all .3s}
 #hearts-display .heart.lost{color:rgba(255,255,255,.15);text-shadow:none}
 @keyframes levelPop{0%{transform:scale(1);box-shadow:0 0 0 var(--ny)}50%{transform:scale(1.3);box-shadow:0 0 25px var(--ny)}100%{transform:scale(1);box-shadow:0 0 0 var(--ny)}}
 @keyframes heartPop{0%{transform:scale(1);text-shadow:0 0 4px #f44}50%{transform:scale(1.5);text-shadow:0 0 20px #f44}100%{transform:scale(1);text-shadow:0 0 4px #f44}}
@@ -574,7 +574,7 @@ body{font-family:'Rajdhani',sans-serif;background:#0a0a1a;min-height:100vh;displ
 .level-flash{animation:levelPop .5s ease-out}
 .heart-flash{animation:heartPop .4s ease-out}
 .score-flash{animation:scorePop .5s ease-out}
-#sound-btn,#leaderboard-btn{background:rgba(0,0,0,.5);border:none;width:74px;height:74px;border-radius:50%;color:#fff;font-size:2.2rem;cursor:pointer}
+#sound-btn,#leaderboard-btn{background:rgba(0,0,0,.5);border:none;width:44px;height:44px;border-radius:50%;color:#fff;font-size:1.2rem;cursor:pointer}
 #leaderboard-btn{color:var(--ny)}
 #time-indicator{position:absolute;top:96px;right:12px;background:rgba(0,0,0,.5);padding:6px 14px;border-radius:12px;font-size:1rem;color:rgba(255,255,255,.6);z-index:10}
 #gameover-screen{background:radial-gradient(ellipse at center,rgba(200,0,0,.15) 0%,rgba(5,5,20,.97) 70%)}
@@ -842,6 +842,13 @@ function hit(){
 
 function lu(){
  lv++;sp+=0.5;sr=Math.max(30,sr-15);f=5;ui();playLevelup();cf();flashLevel()
+ // Interstitial cada 5 niveles
+ if(lv%5===0&&window.flutter_inappwebview){
+  run=false;paused=true;
+  window.flutter_inappwebview.callHandler('showInterstitial').then(()=>{
+   paused=false;run=true;lp()
+  })
+ }
 }
 function flashLevel(){
  const lb=D('level-badge');lb.classList.remove('level-flash');void lb.offsetWidth;lb.classList.add('level-flash');setTimeout(()=>lb.classList.remove('level-flash'),600)
