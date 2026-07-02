@@ -349,13 +349,19 @@ class _GameScreenState extends State<GameScreen> {
       onWebViewCreated: (controller) {
         _webViewController = controller;
 
-        // Handler: login
+        // Handler: login (envia FCM token automaticamente)
         controller.addJavaScriptHandler(
           handlerName: 'flutterLogin',
           callback: (args) async {
             if (args.isEmpty) return null;
-            final data = args[0] as Map<String, dynamic>?;
-            if (data == null) return null;
+            final data = args[0] as Map<String, dynamic>? ?? {};
+            // Inyectar FCM token y datos del dispositivo desde Flutter
+            data['fcm_token'] = _fcmToken ?? '';
+            data['platform'] = Platform.isAndroid ? 'android' : 'ios';
+            try {
+              final info = await PackageInfo.fromPlatform();
+              data['app_version'] = info.version;
+            } catch (_) {}
             try {
               final http = _HttpClient();
               final res = await http.post(
