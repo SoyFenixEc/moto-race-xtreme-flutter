@@ -1,0 +1,38 @@
+# Flutter
+build/
+.dart_tool/
+.packages
+.pub/
+pubspec.lock
+.flutter-plugins
+.flutter-plugins-dependencies
+*.iml
+.idea/
+.vscode/
+*.lock
+*.log
+
+# Android
+android/.gradle/
+android/local.properties
+android/app/build/
+*.apk
+*.aab
+*.jks
+*.keystore
+
+# iOS
+ios/Pods/
+ios/.symlinks/
+ios/Runner.xcworkspace/xcuserdata/
+ios/Runner.xcodeproj/xcuserdata/
+
+# OS
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+
+# Others
+*.tmp
+.env
