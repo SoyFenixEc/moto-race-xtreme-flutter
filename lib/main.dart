@@ -337,7 +337,7 @@ class _GameScreenState extends State<GameScreen> {
           handlerName: 'flutterLogin',
           callback: (args) async {
             if (args.isEmpty) return null;
-            final data = args[0] as Map?;
+            final data = args[0] as Map<String, dynamic>?;
             if (data == null) return null;
             try {
               final http = _HttpClient();
@@ -357,7 +357,7 @@ class _GameScreenState extends State<GameScreen> {
           handlerName: 'flutterSaveScore',
           callback: (args) async {
             if (args.isEmpty) return null;
-            final data = args[0] as Map?;
+            final data = args[0] as Map<String, dynamic>?;
             if (data == null) return null;
             try {
               final http = _HttpClient();
