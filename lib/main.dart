@@ -4,6 +4,8 @@ import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'dart:io' show Platform;
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 
 // ──────────────────────────────────────────────
 // MOTO RACE XTREME
@@ -12,6 +14,13 @@ import 'package:google_mobile_ads/google_mobile_ads.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Inicializar Firebase
+  try {
+    Firebase.initializeApp();
+  } catch (e) {
+    debugPrint('❌ Firebase init error: $e');
+  }
 
   // Inicializar AdMob
   MobileAds.instance.initialize();
@@ -62,6 +71,7 @@ class _GameScreenState extends State<GameScreen> {
   bool _isLoading = true;
   bool _gameReady = false;
   String? _error;
+  String? _fcmToken;
 
   // AdMob
   BannerAd? _bannerAd;
@@ -90,6 +100,21 @@ class _GameScreenState extends State<GameScreen> {
       final info = await PackageInfo.fromPlatform();
       debugPrint('📦 Moto Race Xtreme v${info.version}');
     } catch (_) {}
+
+    // Obtener FCM token
+    try {
+      final messaging = FirebaseMessaging.instance;
+      await messaging.requestPermission(alert: true, badge: true, sound: true);
+      _fcmToken = await messaging.getToken();
+      debugPrint('📱 FCM Token: $_fcmToken');
+
+      messaging.onTokenRefresh.listen((token) {
+        _fcmToken = token;
+        debugPrint('🔄 FCM renovado: $token');
+      });
+    } catch (e) {
+      debugPrint('❌ FCM error: $e');
+    }
 
     setState(() => _isLoading = false);
   }
