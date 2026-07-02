@@ -193,10 +193,8 @@ class _GameScreenState extends State<GameScreen> {
 
   // Called from JS when game ends
   void _onGameOver() {
-    // Show interstitial every 3 games
-    if (_gameCount % 3 == 0) {
-      _showInterstitialAd();
-    }
+    // El interstitial ahora se maneja desde JS en los botones
+    // (JUGAR, PAUSA, CONTINUAR, SCORE) no desde game over
   }
 
   @override
