@@ -325,7 +325,8 @@ class _GameScreenState extends State<GameScreen> {
         data: _buildGameHtml(),
         mimeType: 'text/html',
         encoding: 'utf-8',
-        baseUrl: WebUri('$_apiBaseUrl/'),
+        // about:blank evita bloqueos de HTTP y el juego carga desde adentro
+        baseUrl: WebUri('about:blank'),
       ),
       onWebViewCreated: (controller) {
         _webViewController = controller;
