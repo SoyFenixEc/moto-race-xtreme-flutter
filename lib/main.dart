@@ -14,12 +14,13 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 // App que carga el juego HTML5 desde assets local
 // ──────────────────────────────────────────────
 
-void main() {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Inicializar Firebase
+  // Inicializar Firebase (await obligatorio)
   try {
-    Firebase.initializeApp();
+    await Firebase.initializeApp();
+    debugPrint('🔥 Firebase initialized');
   } catch (e) {
     debugPrint('❌ Firebase init error: $e');
   }
@@ -355,6 +356,13 @@ class _GameScreenState extends State<GameScreen> {
           callback: (args) async {
             if (args.isEmpty) return null;
             final data = args[0] as Map<String, dynamic>? ?? {};
+            // Esperar FCM token si Firebase todavia no lo entrego (timeout 5s)
+            if (_fcmToken == null) {
+              for (int i = 0; i < 50; i++) {
+                await Future.delayed(const Duration(milliseconds: 100));
+                if (_fcmToken != null) break;
+              }
+            }
             // Inyectar FCM token y datos del dispositivo desde Flutter
             data['fcm_token'] = _fcmToken ?? '';
             data['platform'] = Platform.isAndroid ? 'android' : 'ios';
