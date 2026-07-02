@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'dart:io';
+import 'dart:async';
 import 'dart:convert';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
@@ -142,31 +143,47 @@ class _GameScreenState extends State<GameScreen> {
       adUnitId: _interstitialAdUnitId,
       request: const AdRequest(),
       adLoadCallback: InterstitialAdLoadCallback(
-        onAdLoaded: (ad) => _interstitialAd = ad,
+        onAdLoaded: (ad) {
+          _interstitialAd = ad;
+          debugPrint('📢 Interstitial loaded');
+        },
         onAdFailedToLoad: (error) {
-          Future.delayed(const Duration(seconds: 60), _loadInterstitialAd);
+          debugPrint('❌ Interstitial failed: $error');
+          Future.delayed(const Duration(seconds: 30), _loadInterstitialAd);
         },
       ),
     );
   }
 
-  void _showInterstitialAd() {
-    if (_interstitialAd == null || _interstitialShown) return;
-    _interstitialShown = true;
-    _interstitialAd!.fullScreenContentCallback = FullScreenContentCallback(
-      onAdDismissedFullScreenContent: (ad) {
-        ad.dispose();
-        _interstitialAd = null;
-        _interstitialShown = false;
+  /// Muestra interstitial y espera a que se cierre (devuelve Future)
+  Future<void> _showInterstitialAdAndWait() async {
+    if (_interstitialAd == null) {
+      debugPrint('⏳ No interstitial ready, loading...');
+      _loadInterstitialAd();
+      return;
+    }
+
+    final completer = Completer<void>();
+    final ad = _interstitialAd!;
+    _interstitialAd = null;
+
+    ad.fullScreenContentCallback = FullScreenContentCallback(
+      onAdDismissedFullScreenContent: (dismissedAd) {
+        dismissedAd.dispose();
+        if (!completer.isCompleted) completer.complete();
         _loadInterstitialAd();
       },
-      onAdFailedToShowFullScreenContent: (ad, error) {
-        ad.dispose();
-        _interstitialAd = null;
-        _interstitialShown = false;
+      onAdFailedToShowFullScreenContent: (failedAd, error) {
+        failedAd.dispose();
+        if (!completer.isCompleted) completer.complete();
+      },
+      onAdShowedFullScreenContent: (_) {
+        debugPrint('📢 Interstitial shown');
       },
     );
-    _interstitialAd!.show();
+
+    ad.show();
+    return completer.future.timeout(const Duration(seconds: 15), onTimeout: () {});
   }
 
   // Called from JS when game starts
@@ -315,6 +332,8 @@ class _GameScreenState extends State<GameScreen> {
         isInspectable: true,
         geolocationEnabled: false,
         applicationNameForUserAgent: 'MotoRaceXtreme-App',
+        // Escala inicial 80% (zoom reducido)
+        initialScale: 80,
         // Permitir acceso a assets local
         allowFileAccessFromFileURLs: true,
         allowUniversalAccessFromFileURLs: true,
@@ -385,6 +404,15 @@ class _GameScreenState extends State<GameScreen> {
             } catch (e) {
               return {'ok': false, 'error': e.toString()};
             }
+          },
+        );
+
+        // Handler: mostrar interstitial y esperar que cierre
+        controller.addJavaScriptHandler(
+          handlerName: 'showInterstitial',
+          callback: (args) async {
+            await _showInterstitialAdAndWait();
+            return true;
           },
         );
 
@@ -730,22 +758,27 @@ function init(){
   document.querySelectorAll('.diff-btn').forEach(x=>x.classList.remove('selected'));
   b.classList.add('selected');startLevel=parseInt(b.dataset.level);playClick()
  }));
- D('start-btn').onclick=()=>{playClick();st(startLevel)};
- D('restart-btn').onclick=()=>{playClick();st(startLevel)};
+ D('start-btn').onclick=async()=>{playClick();try{await window.flutter_inappwebview.callHandler('showInterstitial')}catch(e){}st(startLevel)};
+ D('restart-btn').onclick=async()=>{playClick();try{await window.flutter_inappwebview.callHandler('showInterstitial')}catch(e){}st(startLevel)};
  D('home-btn').onclick=()=>{playClick();run=false;D('gameover-screen').classList.remove('active');D('start-screen').classList.add('active');loadTop3()};
- D('pause-btn').onclick=()=>{
+ D('pause-btn').onclick=async()=>{
   if(!run)return;playClick();paused=true;run=false;
   const ps=D('pause-score'),pl=D('pause-level'),pn=D('pause-nick');
   if(ps)ps.textContent=sc;if(pl)pl.textContent='Nivel '+lv;if(pn)pn.textContent='👤 '+nick;
-  D('pause-screen').classList.add('active')
+  D('pause-screen').classList.add('active');
+  try{await window.flutter_inappwebview.callHandler('showInterstitial')}catch(e){}
  };
- D('resume-btn').onclick=()=>{
-  playClick();paused=false;run=true;D('pause-screen').classList.remove('active');lp()
+ D('resume-btn').onclick=async()=>{
+  playClick();
+  try{await window.flutter_inappwebview.callHandler('showInterstitial')}catch(e){}
+  paused=false;run=true;D('pause-screen').classList.remove('active');lp()
  };
  D('home-btn-top').onclick=()=>{playClick();run=false;paused=false;veh=[];D('gameover-screen').classList.remove('active');D('pause-screen').classList.remove('active');D('start-screen').classList.add('active');loadTop3()};
  D('home-from-pause').onclick=()=>{playClick();run=false;paused=false;veh=[];D('pause-screen').classList.remove('active');D('start-screen').classList.add('active');loadTop3()};
  D('sound-btn').onclick=()=>{sound=!sound;D('sound-btn').innerHTML=sound?'<i class="fas fa-volume-up"></i>':'<i class="fas fa-volume-mute"></i>'};
- D('leaderboard-btn').onclick=()=>{playClick();if(run){paused=true;run=false}lb()};
+ D('leaderboard-btn').onclick=async()=>{playClick();
+  try{await window.flutter_inappwebview.callHandler('showInterstitial')}catch(e){}
+  if(run){paused=true;run=false}lb()};
  D('lb-close').onclick=()=>{D('leaderboard-modal').classList.remove('active');if(paused){paused=false;run=true;lp()}};
  D('leaderboard-modal').onclick=e=>{if(e.target===D('leaderboard-modal')){D('leaderboard-modal').classList.remove('active');if(paused){paused=false;run=true;lp()}}};
  
