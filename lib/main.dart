@@ -112,6 +112,40 @@ class _GameScreenState extends State<GameScreen> {
     );
   }
 
+  Widget _buildError() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Icon(Icons.error_outline, size: 80, color: Color(0xFFFF4444)),
+          const SizedBox(height: 20),
+          const Text('Error al cargar el juego',
+              style: TextStyle(color: Colors.white70, fontSize: 18)),
+          if (_error != null) ...[
+            const SizedBox(height: 8),
+            Text(_error!,
+                style: const TextStyle(color: Colors.white38, fontSize: 14),
+                textAlign: TextAlign.center),
+          ],
+          const SizedBox(height: 24),
+          ElevatedButton(
+            onPressed: () {
+              setState(() {
+                _error = null;
+                _gameReady = false;
+              });
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFFFDD00),
+              foregroundColor: const Color(0xFF1a1a2e),
+            ),
+            child: const Text('REINTENTAR'),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildLoadingOverlay() {
     return Container(
       color: const Color(0xFF0a0a1a),
