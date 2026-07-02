@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
-import 'dart:io' show Platform;
+import 'dart:io';
+import 'dart:convert';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -331,18 +332,70 @@ class _GameScreenState extends State<GameScreen> {
       onWebViewCreated: (controller) {
         _webViewController = controller;
 
-        // Registrar handlers para comunicación JS -> Flutter
+        // Handler: login
+        controller.addJavaScriptHandler(
+          handlerName: 'flutterLogin',
+          callback: (args) async {
+            if (args.isEmpty) return null;
+            final data = args[0] as Map?;
+            if (data == null) return null;
+            try {
+              final http = _HttpClient();
+              final res = await http.post(
+                '$_apiBaseUrl/api.php?action=login',
+                body: data,
+              );
+              return res;
+            } catch (e) {
+              return {'ok': false, 'error': e.toString()};
+            }
+          },
+        );
+
+        // Handler: save score
+        controller.addJavaScriptHandler(
+          handlerName: 'flutterSaveScore',
+          callback: (args) async {
+            if (args.isEmpty) return null;
+            final data = args[0] as Map?;
+            if (data == null) return null;
+            try {
+              final http = _HttpClient();
+              final res = await http.post(
+                '$_apiBaseUrl/api.php?action=save_score',
+                body: data,
+              );
+              return res;
+            } catch (e) {
+              return {'ok': false, 'error': e.toString()};
+            }
+          },
+        );
+
+        // Handler: leaderboard
+        controller.addJavaScriptHandler(
+          handlerName: 'flutterLeaderboard',
+          callback: (args) async {
+            try {
+              final http = _HttpClient();
+              final res = await http.get(
+                '$_apiBaseUrl/api.php?action=leaderboard',
+              );
+              return res;
+            } catch (e) {
+              return {'ok': false, 'error': e.toString()};
+            }
+          },
+        );
+
+        // Handler: game events
         controller.addJavaScriptHandler(
           handlerName: 'onGameStart',
-          callback: (args) {
-            _onGameStart();
-          },
+          callback: (args) => _onGameStart(),
         );
         controller.addJavaScriptHandler(
           handlerName: 'onGameOver',
-          callback: (args) {
-            _onGameOver();
-          },
+          callback: (args) => _onGameOver(),
         );
       },
       onLoadStart: (controller, url) {
@@ -620,8 +673,19 @@ body{font-family:'Rajdhani',sans-serif;background:#0a0a1a;min-height:100vh;displ
 ''';
 
   String get _gameJs => '''
-const API='$_apiBaseUrl/api.php';
+// API via Flutter bridge (evita bloqueo HTTP en WebView)
 let pid=null,nick='',sound=true, motoColor='#FFDD00',startLevel=10,paused=false,lastScoreMilestone=0;var st;
+
+async function flutterApi(action, data) {
+  try {
+    if (!window.flutter_inappwebview) throw new Error('bridge');
+    const handler = action==='login'?'flutterLogin':action==='save_score'?'flutterSaveScore':'flutterLeaderboard';
+    const args = data ? [data] : [];
+    return await window.flutter_inappwebview.callHandler(handler, ...args);
+  } catch(e) {
+    return {ok: false, error: e.message || 'error'};
+  }
+}
 let cv,ctx,player,veh=[],rl=[],tr=[],bld=[],hearts=[],stars=[];
 let sc=0,vp=0,lv=1,lives=3,invuln=0,run=false,sp=5,sr=80,f=0,tod='day',tfn=0,drg=false,lastX=0,lastY=0,W=0,H=0,heartTimer=0,starTimer=0;
 const VC=['#FF5252','#448AFF','#69F0AE','#FF4081','#FFC107','#9C27B0'];
@@ -711,8 +775,7 @@ st=function(lv0){lv0=lv0||1;
 
 async function sv(){
  if(!pid)return;
- try{const fd=new FormData();fd.append('player_id',pid);fd.append('score',sc);fd.append('level',lv);fd.append('vehicles_passed',vp);
- await fetch(API+'?action=save_score',{method:'POST',body:fd})}catch(e){}
+ try{await flutterApi('save_score',{player_id:pid,score:sc,level:lv,vehicles_passed:vp})}catch(e){}
 }
 function go(){
  run=false;
@@ -1005,7 +1068,7 @@ function cf(){const clr=['#ffdd00','#ff6b00','#00d4ff','#ff4444','#00ff88','#ff0
 
 async function lb(){
  D('leaderboard-modal').classList.add('active');D('lb-list').innerHTML='<div class="lb-loading"><i class="fas fa-spinner fa-spin"></i> Cargando...</div>'
- try{const r=await fetch(API+'?action=leaderboard');const d=await r.json();
+ try{const d=await flutterApi('leaderboard');
  if(!d.ok||!d.leaders.length){D('lb-list').innerHTML='<div class="lb-empty">Aun no hay puntajes. Se el primero!</div>';return}
  let h='';d.leaders.forEach((l,i)=>{const cls=i===0?'gold':i===1?'silver':i===2?'bronze':'';const rc=i===0?'top1':i===1?'top2':i===2?'top3':'';const me=l.nickname===nick?' lb-me':'';h+='<div class="lb-row '+cls+'"><div class="lb-rank '+rc+'">'+(i+1)+'</div><div class="lb-name'+me+'">'+esc(l.nickname)+'</div><div class="lb-score">'+l.best_score+'</div></div>'});D('lb-list').innerHTML=h}
  catch(e){D('lb-list').innerHTML='<div class="lb-empty">Error al cargar</div>'}}
@@ -1015,7 +1078,7 @@ if(!CanvasRenderingContext2D.prototype.roundRect){CanvasRenderingContext2D.proto
 async function loadTop3(){
  const el=D('top3-scores');if(!el)return;
  try{
-  const r=await fetch(API+'?action=leaderboard');const d=await r.json();
+  const d=await flutterApi('leaderboard');
   if(!d.ok||!d.leaders||!d.leaders.length){el.innerHTML='<div class="top3-empty">Aun no hay puntajes</div>';return}
   const top=d.leaders.slice(0,3);const medals=['gold','silver','bronze'];
   let h='<div class="top3-title">🏆 Mejores Puntajes</div>';
@@ -1029,8 +1092,7 @@ async function autoLogin(){
  const id=Math.random().toString(36).substring(2,7).toUpperCase();
  nick='Guest'+device+id;
  try{
-  const fd=new FormData();fd.append('nickname',nick);fd.append('device',device=='M'?'Mobile':'PC');fd.append('user_agent',navigator.userAgent || '');
-  const r=await fetch(API+'?action=login',{method:'POST',body:fd});const d=await r.json();
+  const d=await flutterApi('login',{nickname:nick,device:device=='M'?'Mobile':'PC',user_agent:navigator.userAgent||''});
   if(d.ok){pid=d.player_id;nick=d.nickname;const m=D('my-nick');if(m)m.textContent='Tu nick: '+nick;const pn=D('player-nick');if(pn)pn.textContent=nick}
  }catch(e){}
 }
@@ -1044,4 +1106,81 @@ window.onload=function(){init();autoLogin().then(loadTop3)};
     _interstitialAd?.dispose();
     super.dispose();
   }
+}
+
+/// Cliente HTTP mínimo para llamadas a la API desde Flutter
+class _HttpClient {
+  Future<Map<String, dynamic>> get(String url) async {
+    final http = dart_io_http_client();
+    return http.get(url);
+  }
+
+  Future<Map<String, dynamic>> post(String url, {Map<String, dynamic>? body}) async {
+    final http = dart_io_http_client();
+    return http.post(url, body: body);
+  }
+}
+
+/// Helper que usa dart:io HttpClient para evitar bloqueos del WebView
+class dart_io_http_client {
+  Future<Map<String, dynamic>> get(String url) async {
+    try {
+      final parsed = Uri.parse(url);
+      final client = _DartIoClient();
+      final result = await client.get(parsed);
+      return result;
+    } catch (e) {
+      return {'ok': false, 'error': e.toString()};
+    }
+  }
+
+  Future<Map<String, dynamic>> post(String url, {Map<String, dynamic>? body}) async {
+    try {
+      final parsed = Uri.parse(url);
+      final client = _DartIoClient();
+      final result = await client.post(parsed, body: body);
+      return result;
+    } catch (e) {
+      return {'ok': false, 'error': e.toString()};
+    }
+  }
+}
+
+class _DartIoClient {
+  Future<Map<String, dynamic>> get(Uri url) async {
+    final client = HttpClient();
+    client.userAgent = 'MotoRaceXtreme-App';
+    try {
+      final request = await client.getUrl(url);
+      final response = await request.close();
+      final body = await response.transform(utf8.decoder).join();
+      return json.decode(body) as Map<String, dynamic>;
+    } finally {
+      client.close();
+    }
+  }
+
+  Future<Map<String, dynamic>> post(Uri url, {Map<String, dynamic>? body}) async {
+    final client = HttpClient();
+    client.userAgent = 'MotoRaceXtreme-App';
+    try {
+      final request = await client.postUrl(url);
+      if (body != null) {
+        final bodyStr = _urlEncodeBody(body);
+        request.headers.contentType = ContentType('application', 'x-www-form-urlencoded');
+        request.write(bodyStr);
+      }
+      final response = await request.close();
+      final responseBody = await response.transform(utf8.decoder).join();
+      return json.decode(responseBody) as Map<String, dynamic>;
+    } finally {
+      client.close();
+    }
+  }
+}
+
+String _urlEncodeBody(Map<String, dynamic> data) {
+  return data.entries
+      .map((e) => '${Uri.encodeComponent(e.key)}=${Uri.encodeComponent(e.value?.toString() ?? '')}')
+      .join('&');
 }
