@@ -8,11 +8,16 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 // ──────────────────────────────────────────────
 // MOTO RACE XTREME
 // App que carga el juego HTML5 desde assets local
 // ──────────────────────────────────────────────
+
+/// Plugin de notificaciones locales (para canal y foreground)
+final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
+    FlutterLocalNotificationsPlugin();
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -24,6 +29,15 @@ void main() async {
   } catch (e) {
     debugPrint('❌ Firebase init error: $e');
   }
+
+  // Configurar notificaciones locales y canal Android
+  _initNotifications();
+
+  // Manejar notificaciones en foreground
+  FirebaseMessaging.onMessage.listen(_onForegroundMessage);
+
+  // Manejar notificaciones cuando la app está en background/terminada
+  FirebaseMessaging.onBackgroundMessage(_onBackgroundMessage);
 
   // Inicializar AdMob
   MobileAds.instance.initialize();
@@ -46,6 +60,69 @@ void main() async {
   }
 
   runApp(const MotoRaceApp());
+}
+
+/// Inicializa el canal de notificaciones de Android
+void _initNotifications() {
+  const androidSettings =
+      AndroidInitializationSettings('@mipmap/ic_launcher');
+  const initSettings =
+      InitializationSettings(android: androidSettings);
+  flutterLocalNotificationsPlugin.initialize(initSettings);
+
+  if (Platform.isAndroid) {
+    const channel = AndroidNotificationChannel(
+      'moto_race_xtreme_channel',
+      'Notificaciones Moto Race Xtreme',
+      description: 'Canal de notificaciones del juego',
+      importance: Importance.high,
+      playSound: true,
+      enableVibration: true,
+    );
+    flutterLocalNotificationsPlugin
+        .resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin>()
+        ?.createNotificationChannel(channel);
+    debugPrint('🔔 Canal de notificaciones creado');
+  }
+}
+
+/// Muestra una notificación local (para foreground)
+Future<void> _showLocalNotification(
+    RemoteMessage message) async {
+  final notification = message.notification;
+  if (notification == null) return;
+
+  const androidDetails = AndroidNotificationDetails(
+    'moto_race_xtreme_channel',
+    'Notificaciones Moto Race Xtreme',
+    channelDescription: 'Canal de notificaciones del juego',
+    importance: Importance.high,
+    priority: Priority.high,
+    playSound: true,
+    enableVibration: true,
+    showWhen: true,
+  );
+  const details = NotificationDetails(android: androidDetails);
+
+  await flutterLocalNotificationsPlugin.show(
+    DateTime.now().millisecondsSinceEpoch ~/ 1000,
+    notification.title ?? 'Moto Race Xtreme',
+    notification.body ?? '',
+    details,
+  );
+}
+
+/// Handler para notificaciones en foreground (app abierta)
+void _onForegroundMessage(RemoteMessage message) {
+  debugPrint('📩 Foreground notification: ${message.notification?.title}');
+  _showLocalNotification(message);
+}
+
+/// Handler para notificaciones en background
+@pragma('vm:entry-point')
+Future<void> _onBackgroundMessage(RemoteMessage message) async {
+  debugPrint('📩 Background notification: ${message.notification?.title}');
 }
 
 class MotoRaceApp extends StatelessWidget {
