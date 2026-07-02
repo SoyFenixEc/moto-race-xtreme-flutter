@@ -317,6 +317,8 @@ class _GameScreenState extends State<GameScreen> {
         // Permitir acceso a assets local
         allowFileAccessFromFileURLs: true,
         allowUniversalAccessFromFileURLs: true,
+        // Permitir contenido mixto (HTTP desde HTTPS base)
+        mixedContentMode: MixedContentPolicy.MIXED_CONTENT_ALWAYS_ALLOW,
         // Sin cache para que el juego siempre cargue fresco
         cacheEnabled: false,
       ),
