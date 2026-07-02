@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'dart:io' show Platform;
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:google_mobile_ads/google_mobile_ads.dart';
 
 // ──────────────────────────────────────────────
 // MOTO RACE XTREME
@@ -11,6 +12,9 @@ import 'package:package_info_plus/package_info_plus.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Inicializar AdMob
+  MobileAds.instance.initialize();
 
   // Edge-to-edge en mobile
   if (Platform.isAndroid) {
@@ -59,14 +63,25 @@ class _GameScreenState extends State<GameScreen> {
   bool _gameReady = false;
   String? _error;
 
+  // AdMob
+  BannerAd? _bannerAd;
+  bool _bannerAdLoaded = false;
+  InterstitialAd? _interstitialAd;
+  bool _interstitialShown = false;
+  int _gameCount = 0;
+
   static const String _apiBaseUrl = 'http://161.97.74.198/moto_racer_extreme';
-  // Para usar dominio en lugar de IP, cambiar a:
-  // static const String _apiBaseUrl = 'http://tudominio.com/moto_racer_extreme';
+
+  // AdMob IDs
+  static const String _bannerAdUnitId = 'ca-app-pub-7277241406857965/9182108330';
+  static const String _interstitialAdUnitId = 'ca-app-pub-7277241406857965/9413208474';
 
   @override
   void initState() {
     super.initState();
     _initGame();
+    _loadBannerAd();
+    _loadInterstitialAd();
   }
 
   Future<void> _initGame() async {
@@ -77,6 +92,68 @@ class _GameScreenState extends State<GameScreen> {
     } catch (_) {}
 
     setState(() => _isLoading = false);
+  }
+
+  void _loadBannerAd() {
+    _bannerAd = BannerAd(
+      size: AdSize.banner,
+      adUnitId: _bannerAdUnitId,
+      listener: BannerAdListener(
+        onAdLoaded: (_) {
+          if (mounted) setState(() => _bannerAdLoaded = true);
+        },
+        onAdFailedToLoad: (ad, error) {
+          ad.dispose();
+          Future.delayed(const Duration(seconds: 30), _loadBannerAd);
+        },
+      ),
+      request: const AdRequest(),
+    )..load();
+  }
+
+  void _loadInterstitialAd() {
+    InterstitialAd.load(
+      adUnitId: _interstitialAdUnitId,
+      request: const AdRequest(),
+      adLoadCallback: InterstitialAdLoadCallback(
+        onAdLoaded: (ad) => _interstitialAd = ad,
+        onAdFailedToLoad: (error) {
+          Future.delayed(const Duration(seconds: 60), _loadInterstitialAd);
+        },
+      ),
+    );
+  }
+
+  void _showInterstitialAd() {
+    if (_interstitialAd == null || _interstitialShown) return;
+    _interstitialShown = true;
+    _interstitialAd!.fullScreenContentCallback = FullScreenContentCallback(
+      onAdDismissedFullScreenContent: (ad) {
+        ad.dispose();
+        _interstitialAd = null;
+        _interstitialShown = false;
+        _loadInterstitialAd();
+      },
+      onAdFailedToShowFullScreenContent: (ad, error) {
+        ad.dispose();
+        _interstitialAd = null;
+        _interstitialShown = false;
+      },
+    );
+    _interstitialAd!.show();
+  }
+
+  // Called from JS when game starts
+  void _onGameStart() {
+    _gameCount++;
+  }
+
+  // Called from JS when game ends
+  void _onGameOver() {
+    // Show interstitial every 3 games
+    if (_gameCount % 3 == 0) {
+      _showInterstitialAd();
+    }
   }
 
   @override
@@ -99,15 +176,31 @@ class _GameScreenState extends State<GameScreen> {
 
     return Scaffold(
       backgroundColor: const Color(0xFF0a0a1a),
-      body: SafeArea(
-        child: _error != null
-            ? _buildError()
-            : Stack(
-                children: [
-                  _buildWebView(),
-                  if (!_gameReady) _buildLoadingOverlay(),
-                ],
+      body: Column(
+        children: [
+          Expanded(
+            child: _error != null
+                ? _buildError()
+                : Stack(
+                    children: [
+                      _buildWebView(),
+                      if (!_gameReady) _buildLoadingOverlay(),
+                    ],
+                  ),
+          ),
+          // Banner Ad
+          if (_bannerAdLoaded && _bannerAd != null)
+            Container(
+              color: const Color(0xFF0a0a1a),
+              child: Center(
+                child: SizedBox(
+                  width: _bannerAd!.size.width.toDouble(),
+                  height: _bannerAd!.size.height.toDouble(),
+                  child: AdWidget(ad: _bannerAd!),
+                ),
               ),
+            ),
+        ],
       ),
     );
   }
@@ -210,12 +303,53 @@ class _GameScreenState extends State<GameScreen> {
       ),
       onWebViewCreated: (controller) {
         _webViewController = controller;
+
+        // Registrar handlers para comunicación JS -> Flutter
+        controller.addJavaScriptHandler(
+          handlerName: 'onGameStart',
+          callback: (args) {
+            _onGameStart();
+          },
+        );
+        controller.addJavaScriptHandler(
+          handlerName: 'onGameOver',
+          callback: (args) {
+            _onGameOver();
+          },
+        );
       },
       onLoadStart: (controller, url) {
         debugPrint('📄 Cargando juego: $url');
       },
       onLoadStop: (controller, url) async {
         debugPrint('✅ Juego cargado: $url');
+
+        // Inyectar JS para comunicar eventos de juego a Flutter
+        await controller.evaluateJavascript(source: '''
+(function() {
+  // Interceptar game over
+  const _origGo = window.go;
+  if (_origGo) {
+    window.go = function() {
+      if (window.flutter_inappwebview && window.flutter_inappwebview.callHandler) {
+        window.flutter_inappwebview.callHandler('onGameOver');
+      }
+      _origGo();
+    };
+  }
+
+  // Interceptar start
+  const _origSt = window.st;
+  if (_origSt) {
+    window.st = function(lv) {
+      if (window.flutter_inappwebview && window.flutter_inappwebview.callHandler) {
+        window.flutter_inappwebview.callHandler('onGameStart');
+      }
+      _origSt(lv);
+    };
+  }
+})();
+''');
 
         // Pequeña pausa y luego ocultar el overlay de carga
         await Future.delayed(const Duration(milliseconds: 500));
@@ -879,6 +1013,8 @@ window.onload=function(){init();autoLogin().then(loadTop3)};
   @override
   void dispose() {
     _webViewController?.dispose();
+    _bannerAd?.dispose();
+    _interstitialAd?.dispose();
     super.dispose();
   }
 }
