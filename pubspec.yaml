@@ -2,7 +2,7 @@ name: moto_race_xtreme
 description: "Moto Racer Extreme - Juego de carreras"
 publish_to: 'none'
 
-version: 1.0.0+1
+version: 1.0.0+2
 
 environment:
   sdk: ^3.6.0  # 👈 CAMBIADO de 3.11.0 a 3.6.0
